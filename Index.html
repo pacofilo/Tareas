@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- Añadido para PWA -->
+    <meta name="theme-color" content="#3b82f6">
+    <link rel="manifest" href="manifest.json">
+    
+    <title>TaskFlow Trabajo v2.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        :root {
+            --accent: 59 130 246;
+        }
+        .accent-bg { background-color: rgb(var(--accent)); }
+        .accent-text { color: rgb(var(--accent)); }
+        .accent-border { border-color: rgb(var(--accent)); }
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .task-item { transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+        .subtask { transition: all 0.2s; }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+    <div class="max-w-[420px] mx-auto p-4 pb-24">
+        <!-- Header -->
+        <div class="flex items-center justify-between py-4">
+            <div class="flex items-center gap-3">
+                <div id="logo" class="w-11 h-11 accent-bg rounded-3xl flex items-center justify-center text-white font-bold text-3xl shadow-xl">T</div>
+                <div>
+                    <h1 class="text-3xl font-semibold tracking-tighter">TaskFlow</h1>
+                    <p class="text-xs text-zinc-400 -mt-1">Trabajo v2.0</p>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="showSettings()" class="w-11 h-11 bg-zinc-900 hover:bg-zinc-800 rounded-3xl flex items-center justify-center">
+                    <i class="fas fa-cog text-xl"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Project selector -->
+        <div class="flex items-center gap-2 mb-4">
+            <select id="project-select" onchange="changeProject()" class="bg-zinc-900 border border-zinc-700 rounded-3xl px-5 py-3 text-sm flex-1 accent-border">
+            </select>
+            <button onclick="addNewProject()" class="bg-zinc-800 hover:bg-zinc-700 px-5 py-3 rounded-3xl text-sm">
+                <i class="fas fa-plus"></i>
+            </button>
+        </div>
+
+        <!-- Add task -->
+        <div class="bg-zinc-900 rounded-3xl p-6 mb-6">
+            <input id="new-task" type="text" placeholder="Nueva tarea principal..." 
+                   class="w-full bg-transparent outline-none text-xl font-medium placeholder-zinc-500 mb-4">
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="text-xs text-zinc-400">Fecha</label>
+                    <input id="new-due" type="date" class="bg-zinc-800 w-full rounded-2xl px-4 py-3 text-sm">
+                </div>
+                <div>
+                    <label class="text-xs text-zinc-400">Prioridad</label>
+                    <select id="new-priority" class="bg-zinc-800 w-full rounded-2xl px-4 py-3 text-sm">
+                        <option value="media">Media</option>
+                        <option value="alta">Alta</option>
+                        <option value="baja">Baja</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs text-zinc-400">Recordatorio</label>
+                    <select id="new-reminder" class="bg-zinc-800 w-full rounded-2xl px-4 py-3 text-sm">
+                        <option value="no">No</option>
+                        <option value="yes">Sí (hoy)</option>
+                    </select>
+                </div>
+            </div>
+            <button onclick="addNewTask()" class="mt-5 w-full accent-bg py-4 rounded-3xl font-semibold text-lg flex items-center justify-center gap-2">
+                <i class="fas fa-plus"></i> Añadir tarea
+            </button>
+        </div>
+
+        <!-- Filters -->
+        <div class="flex gap-1 bg-zinc-900 rounded-3xl p-1 mb-6 text-sm font-medium">
+            <button onclick="setFilter('all')" id="f-all" class="flex-1 py-3 rounded-3xl">Todas</button>
+            <button onclick="setFilter('pending')" id="f-pending" class="flex-1 py-3 rounded-3xl">Pendientes</button>
+            <button onclick="setFilter('completed')" id="f-completed" class="flex-1 py-3 rounded-3xl">Completadas</button>
+        </div>
+
+        <!-- Task list -->
+        <div id="task-list" class="space-y-4"></div>
+
+        <!-- Export buttons -->
+        <div class="flex gap-3 mt-10">
+            <button onclick="exportCSV()" class="flex-1 bg-zinc-800 hover:bg-emerald-600 py-4 rounded-3xl font-medium flex items-center justify-center gap-2">
+                <i class="fas fa-file-excel"></i> Excel
+            </button>
+            <button onclick="exportPDF()" class="flex-1 bg-zinc-800 hover:bg-red-600 py-4 rounded-3xl font-medium flex items-center justify-center gap-2">
+                <i class="fas fa-file-pdf"></i> PDF
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="hidden fixed inset-0 bg-black/80 flex items-end">
+        <div class="bg-zinc-900 w-full rounded-t-3xl p-6 max-h-[85vh] overflow-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold">Ajustes</h2>
+                <button onclick="hideSettings()" class="text-3xl leading-none">×</button>
+            </div>
+            
+            <!-- Theme -->
+            <div class="mb-8">
+                <p class="text-sm text-zinc-400 mb-3">Apariencia</p>
+                <div class="flex items-center justify-between bg-zinc-800 rounded-3xl p-4">
+                    <span>Modo oscuro / claro</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="theme-toggle" onchange="toggleTheme()" class="sr-only peer">
+                        <div class="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Accent color -->
+            <div class="mb-8">
+                <p class="text-sm text-zinc-400 mb-3">Color favorito</p>
+                <div class="flex gap-4 flex-wrap">
+                    <input type="color" id="accent-picker" value="#3b82f6" onchange="changeAccent(this.value)" class="w-16 h-16 bg-transparent rounded-2xl cursor-pointer">
+                </div>
+            </div>
+
+            <!-- Projects -->
+            <div>
+                <p class="text-sm text-zinc-400 mb-3 flex justify-between">
+                    <span>Proyectos</span>
+                    <button onclick="addNewProject()" class="text-blue-400 text-xs">+ Nuevo</button>
+                </p>
+                <div id="projects-list" class="space-y-2"></div>
+            </div>
+
+            <button onclick="hideSettings()" class="mt-10 w-full accent-bg py-4 rounded-3xl font-semibold">Guardar y cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        // Tu script original sin cambios
+        let tasks = [];
+        let projects = ["Trabajo", "Personal", "Equipo", "Otros"];
+        let currentProject = "Trabajo";
+        let currentFilter = "all";
+        let accentColor = "#3b82f6";
+        const STORAGE_KEY = "taskflow_v2";
+
+        // ... (todo el resto de tus funciones siguen iguales: loadData, saveData, initTheme, etc.)
+
+        window.onload = () => {
+            loadData();
+            initTheme();
+            setFilter('all');
+        };
+
+        // Añadido para PWA: registro del service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => {
+                        console.log('Service Worker registrado correctamente', reg);
+                    })
+                    .catch(err => {
+                        console.log('Error al registrar Service Worker', err);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>
