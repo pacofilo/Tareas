@@ -2,7 +2,7 @@
   "name": "TaskFlow Trabajo v2.0",
   "short_name": "TaskFlow",
   "description": "Gestor de tareas y proyectos simple y potente",
-  "start_url": "Aplicación.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0a0a0a",
   "theme_color": "#3b82f6",
@@ -21,4 +21,5 @@
       "purpose": "any maskable"
     }
   ]
+
 }
