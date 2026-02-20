@@ -3,10 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- Añadido para PWA -->
-    <meta name="theme-color" content="#3b82f6">
-    <link rel="manifest" href="manifest.json">
-    
     <title>TaskFlow Trabajo v2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -144,7 +140,6 @@
     </div>
 
     <script>
-        // Tu script original sin cambios
         let tasks = [];
         let projects = ["Trabajo", "Personal", "Equipo", "Otros"];
         let currentProject = "Trabajo";
@@ -152,26 +147,261 @@
         let accentColor = "#3b82f6";
         const STORAGE_KEY = "taskflow_v2";
 
-        // ... (todo el resto de tus funciones siguen iguales: loadData, saveData, initTheme, etc.)
+        function loadData() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                const data = JSON.parse(saved);
+                tasks = data.tasks || [];
+                projects = data.projects || projects;
+                currentProject = data.currentProject || "Trabajo";
+                accentColor = data.accentColor || "#3b82f6";
+            } else {
+                tasks = [
+                    { id: 1, text: "Preparar presentación Q1", done: false, due: "2026-02-21", priority: "alta", project: "Trabajo", subtasks: [
+                        { id: 11, text: "Hacer slides", done: false },
+                        { id: 12, text: "Revisar datos", done: true }
+                    ]},
+                    { id: 2, text: "Llamar al proveedor", done: false, due: "2026-02-20", priority: "media", project: "Trabajo", subtasks: [] }
+                ];
+            }
+            applyAccent();
+            renderProjects();
+            renderTasks();
+            requestNotificationPermission();
+        }
+
+        function saveData() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks, projects, currentProject, accentColor }));
+        }
+
+        function initTheme() {
+            const isDark = localStorage.getItem('theme') !== 'light';
+            document.documentElement.classList.toggle('dark', isDark);
+            document.getElementById('theme-toggle').checked = !isDark;
+        }
+        function toggleTheme() {
+            const isLight = document.getElementById('theme-toggle').checked;
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+            document.documentElement.classList.toggle('dark', !isLight);
+        }
+
+        function applyAccent() {
+            document.documentElement.style.setProperty('--accent', accentColor.replace('#','').match(/.{1,2}/g).map(x=>parseInt(x,16)).join(' '));
+            document.getElementById('logo').style.backgroundColor = accentColor;
+        }
+        function changeAccent(color) {
+            accentColor = color;
+            applyAccent();
+            saveData();
+        }
+
+        function renderProjects() {
+            const select = document.getElementById('project-select');
+            select.innerHTML = projects.map(p => `<option value="${p}" ${p===currentProject?'selected':''}>${p}</option>`).join('');
+            const list = document.getElementById('projects-list');
+            list.innerHTML = projects.map((p,i) => `
+                <div class="flex items-center justify-between bg-zinc-800 px-5 py-3 rounded-3xl">
+                    <span>${p}</span>
+                    ${i > 3 ? `<button onclick="deleteProject(${i})" class="text-red-400 text-xs">Eliminar</button>` : ''}
+                </div>
+            `).join('');
+        }
+        function changeProject() {
+            currentProject = document.getElementById('project-select').value;
+            saveData();
+            renderTasks();
+        }
+        function addNewProject() {
+            const name = prompt("Nombre del nuevo proyecto:");
+            if (name && !projects.includes(name)) {
+                projects.push(name);
+                renderProjects();
+                saveData();
+            }
+        }
+        function deleteProject(index) {
+            if (confirm("¿Eliminar proyecto?")) {
+                projects.splice(index, 1);
+                if (currentProject === projects[index]) currentProject = projects[0] || "Trabajo";
+                renderProjects();
+                saveData();
+                renderTasks();
+            }
+        }
+
+        function addNewTask() {
+            const text = document.getElementById('new-task').value.trim();
+            if (!text) return;
+            const due = document.getElementById('new-due').value;
+            const priority = document.getElementById('new-priority').value;
+            const reminder = document.getElementById('new-reminder').value === 'yes';
+
+            tasks.unshift({
+                id: Date.now(),
+                text,
+                done: false,
+                due,
+                priority,
+                project: currentProject,
+                subtasks: [],
+                reminder
+            });
+
+            document.getElementById('new-task').value = '';
+            saveData();
+            renderTasks();
+        }
+
+        function toggleTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (task) task.done = !task.done;
+            saveData();
+            renderTasks();
+        }
+
+        function deleteTask(id) {
+            if (confirm('¿Eliminar esta tarea y sus subtareas?')) {
+                tasks = tasks.filter(t => t.id !== id);
+                saveData();
+                renderTasks();
+            }
+        }
+
+        function addSubtask(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+            const text = prompt("Texto de la subtarea:");
+            if (text) {
+                task.subtasks.push({ id: Date.now(), text, done: false });
+                saveData();
+                renderTasks();
+            }
+        }
+
+        function toggleSubtask(taskId, subId) {
+            const task = tasks.find(t => t.id === taskId);
+            const sub = task.subtasks.find(s => s.id === subId);
+            if (sub) sub.done = !sub.done;
+            saveData();
+            renderTasks();
+        }
+
+        function renderTasks() {
+            const container = document.getElementById('task-list');
+            container.innerHTML = '';
+
+            let filtered = tasks.filter(t => t.project === currentProject);
+            if (currentFilter === 'pending') filtered = filtered.filter(t => !t.done);
+            if (currentFilter === 'completed') filtered = filtered.filter(t => t.done);
+
+            filtered.sort((a,b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || (a.due || '9999').localeCompare(b.due || '9999'));
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<p class="text-center py-20 text-zinc-500">No hay tareas en este proyecto</p>`;
+                return;
+            }
+
+            filtered.forEach(task => {
+                const overdue = task.due && new Date(task.due) < new Date() && !task.done;
+                const prioColor = {alta:'red',media:'amber',baja:'emerald'}[task.priority];
+
+                let html = `
+                <div class="task-item bg-zinc-900 rounded-3xl p-5">
+                    <div class="flex gap-4">
+                        <div onclick="toggleTask(${task.id})" class="cursor-pointer pt-1">
+                            <div class="${task.done ? 'accent-bg' : 'border-2 border-zinc-600'} w-7 h-7 rounded-2xl flex items-center justify-center">
+                                ${task.done ? '<i class="fas fa-check text-white text-sm"></i>' : ''}
+                            </div>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-[17px] ${task.done ? 'line-through text-zinc-500' : ''}">${task.text}</p>
+                            <div class="flex gap-3 mt-3 text-xs">
+                                ${task.due ? `<span class="${overdue?'text-red-400':''}"><i class="fas fa-calendar"></i> ${new Date(task.due).toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>` : ''}
+                                <span class="px-3 py-0.5 rounded-2xl border border-${prioColor}-400/30 text-${prioColor}-400">${task.priority.toUpperCase()}</span>
+                            </div>
+
+                            <div class="mt-4">
+                                <div onclick="this.nextElementSibling.classList.toggle('hidden')" class="text-xs text-zinc-400 flex items-center gap-1 cursor-pointer">
+                                    <i class="fas fa-list-check"></i> ${task.subtasks.length} subtareas
+                                </div>
+                                <div class="hidden mt-3 space-y-2 pl-8">
+                                    ${task.subtasks.map(sub => `
+                                        <div class="flex items-center gap-3 text-sm">
+                                            <div onclick="toggleSubtask(${task.id},${sub.id})" class="cursor-pointer">
+                                                <div class="${sub.done ? 'accent-bg' : 'border border-zinc-600'} w-5 h-5 rounded-xl flex items-center justify-center">
+                                                    ${sub.done ? '<i class="fas fa-check text-[10px] text-white"></i>' : ''}
+                                                </div>
+                                            </div>
+                                            <span class="${sub.done ? 'line-through text-zinc-500' : ''}">${sub.text}</span>
+                                        </div>
+                                    `).join('')}
+                                    <button onclick="addSubtask(${task.id})" class="text-blue-400 text-xs flex items-center gap-1">
+                                        <i class="fas fa-plus"></i> Añadir subtarea
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="deleteTask(${task.id})" class="text-zinc-500 hover:text-red-400">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>`;
+                container.innerHTML += html;
+            });
+        }
+
+        function setFilter(f) {
+            currentFilter = f;
+            document.querySelectorAll('#f-all,#f-pending,#f-completed').forEach(b => b.classList.toggle('bg-zinc-800', b.id === `f-${f}`));
+            renderTasks();
+        }
+
+        function requestNotificationPermission() {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        }
+
+        function exportCSV() {
+            let csv = "Tarea,Hecha,Fecha,Prioridad,Proyecto,Subtareas\n";
+            tasks.forEach(t => {
+                const subs = t.subtasks.map(s => s.text).join('; ');
+                csv += `"${t.text}",${t.done},"${t.due || ''}",${t.priority},${t.project},"${subs}"\n`;
+            });
+            const blob = new Blob([csv], {type: 'text/csv'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'taskflow_trabajo.csv';
+            a.click();
+        }
+
+        function exportPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.text("TaskFlow Trabajo - Exportación", 20, 20);
+            let y = 40;
+            tasks.forEach((t, i) => {
+                doc.text(`${i+1}. ${t.text} ${t.done?'✅':''}`, 20, y);
+                if (t.due) doc.text(`Fecha: ${t.due}`, 25, y+7);
+                y += 15;
+                if (y > 250) { doc.addPage(); y = 20; }
+            });
+            doc.save('taskflow_trabajo.pdf');
+        }
+
+        function showSettings() {
+            document.getElementById('settings-modal').classList.remove('hidden');
+        }
+        function hideSettings() {
+            document.getElementById('settings-modal').classList.add('hidden');
+            saveData();
+        }
 
         window.onload = () => {
             loadData();
             initTheme();
             setFilter('all');
         };
-
-        // Añadido para PWA: registro del service worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(reg => {
-                        console.log('Service Worker registrado correctamente', reg);
-                    })
-                    .catch(err => {
-                        console.log('Error al registrar Service Worker', err);
-                    });
-            });
-        }
     </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9d09f81bad64547b',t:'MTc3MTU0ODIwMC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
