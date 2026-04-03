@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PreCrastinar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        :root {
+            --bg-main:  #F5F0E8;
+            --bg-card:  #FFFCF5;
+            --bg-input: #EDE8DC;
+            --text:     #1C1814;
+            --muted:    #8C7B6B;
+            --accent:   #C8603A;
+            --accent2:  #E07A54;
+            --border:   #D4CBBA;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg-main);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── Cards & inputs ── */
+        .card  { background: var(--bg-card);  border: 1px solid var(--border); }
+        .inp   { background: var(--bg-input); border: 1px solid var(--border); color: var(--text); }
+        .inp:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+        select.inp { -webkit-appearance: none; appearance: none; }
+
+        /* ── Accent button ── */
+        .btn-a { background: var(--accent); color: #fff; transition: background .2s; }
+        .btn-a:hover { background: var(--accent2); }
+
+        /* ── Filter tabs ── */
+        .ftab { color: var(--muted); transition: all .2s; }
+        .ftab.active { background: var(--accent); color: #fff; }
+
+        /* ── Priority badges ── */
+        .p-alta  { color:#DC2626; border-color:#FCA5A5; background:#FEF2F2; }
+        .p-media { color:#D97706; border-color:#FCD34D; background:#FFFBEB; }
+        .p-baja  { color:#059669; border-color:#A7F3D0; background:#ECFDF5; }
+
+        /* ── Task item ── */
+        .task-item { transition: all .25s cubic-bezier(.4,0,.2,1); }
+        .done-check { background: var(--accent) !important; }
+
+        /* ── Reminder chip ── */
+        .rem-chip { color: var(--accent); background: rgba(200,96,58,.1); }
+
+        /* ── AM/PM toggle ── */
+        .ampm {
+            padding: 8px 20px; border-radius: 14px; font-weight: 600;
+            font-size: 14px; transition: all .2s; cursor: pointer;
+            color: var(--muted); border: 1px solid var(--border);
+            background: var(--bg-input);
+        }
+        .ampm.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+        /* ── Clock SVG ── */
+        #clock-svg { touch-action: none; user-select: none; cursor: default; }
+        .h-hand { stroke: #1C1814; stroke-width: 5; stroke-linecap: round; }
+        .m-hand { stroke: #C8603A; stroke-width: 3.5; stroke-linecap: round; }
+        .knob   { fill: #C8603A; cursor: grab; }
+        .knob-h { fill: #1C1814; cursor: grab; }
+        .knob:active, .knob-h:active { cursor: grabbing; }
+
+        /* scrollbar */
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-input); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        ::placeholder { color: var(--muted); opacity: .7; }
+    </style>
+</head>
+<body>
+<div class="max-w-[430px] mx-auto p-4 pb-28">
+
+    <!-- ── Header ── -->
+    <div class="flex items-center justify-between py-4">
+        <div class="flex items-center gap-3">
+            <div id="logo"
+                 class="btn-a h-11 px-4 rounded-full flex items-center justify-center font-bold text-sm shadow-lg whitespace-nowrap select-none">
+                Paquico
+            </div>
+            <div>
+                <h1 class="text-[28px] font-bold tracking-tight leading-tight">PreCrastinar</h1>
+                <p class="text-xs leading-none mt-0.5" style="color:var(--muted)">Gestión personal</p>
+            </div>
+        </div>
+        <button onclick="showSettings()"
+                class="w-11 h-11 card rounded-full flex items-center justify-center"
+                style="color:var(--muted)">
+            <i class="fas fa-cog text-xl"></i>
+        </button>
+    </div>
+
+    <!-- ── Category selector ── -->
+    <div class="flex items-center gap-2 mb-5">
+        <select id="project-select" onchange="changeProject()"
+                class="inp rounded-full px-5 py-3 text-sm flex-1 font-medium">
+        </select>
+        <button onclick="addNewProject()"
+                class="inp px-4 py-3 rounded-full text-sm hover:opacity-80 font-bold"
+                style="color:var(--accent); border-color:var(--accent)">
+            <i class="fas fa-plus"></i>
+        </button>
+    </div>
+
+    <!-- ── Add task ── -->
+    <div class="card rounded-3xl p-5 mb-6">
+        <input id="new-task" type="text" placeholder="Nueva tarea..."
+               class="w-full bg-transparent outline-none text-xl font-medium mb-4 pb-3"
+               style="border-bottom:1px solid var(--border)">
+
+        <!-- Row 1: Fecha + Hora -->
+        <div class="grid grid-cols-2 gap-3 mb-3">
+            <div>
+                <label class="text-[11px] font-semibold uppercase tracking-wide mb-1.5 block" style="color:var(--muted)">Fecha</label>
+                <input id="new-due" type="date"
+                       class="inp w-full rounded-2xl px-4 py-3 text-sm">
+            </div>
+            <div>
+                <label class="text-[11px] font-semibold uppercase tracking-wide mb-1.5 block" style="color:var(--muted)">Hora</label>
+                <button onclick="openClock()" id="time-btn"
+                        class="inp w-full rounded-2xl px-4 py-3 text-sm flex items-center justify-between">
+                    <span id="time-display" style="color:var(--muted)">--:--</span>
+                    <i class="fas fa-clock" style="color:var(--accent)"></i>
+                </button>
+                <input type="hidden" id="new-time" value="">
+            </div>
+        </div>
+
+        <!-- Row 2: Prioridad + Recordatorio -->
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="text-[11px] font-semibold uppercase tracking-wide mb-1.5 block" style="color:var(--muted)">Prioridad</label>
+                <select id="new-priority" class="inp w-full rounded-2xl px-4 py-3 text-sm font-medium">
+                    <option value="media">● Media</option>
+                    <option value="alta">● Alta</option>
+                    <option value="baja">● Baja</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-[11px] font-semibold uppercase tracking-wide mb-1.5 block" style="color:var(--muted)">Recordatorio</label>
+                <select id="new-reminder" class="inp w-full rounded-2xl px-4 py-3 text-sm font-medium">
+                    <option value="no">Sin aviso</option>
+                    <option value="1h">1 hora antes</option>
+                    <option value="2h">2 horas antes</option>
+                    <option value="1d">1 día antes</option>
+                    <option value="2d">2 días antes</option>
+                </select>
+            </div>
+        </div>
+
+        <button onclick="addNewTask()"
+                class="btn-a mt-5 w-full py-4 rounded-3xl font-bold text-base flex items-center justify-center gap-2 shadow-md">
+            <i class="fas fa-plus"></i> Añadir tarea
+        </button>
+    </div>
+
+    <!-- ── Filters ── -->
+    <div class="flex gap-1 card rounded-full p-1 mb-6 text-sm font-semibold">
+        <button onclick="setFilter('all')"       id="f-all"       class="ftab flex-1 py-2.5 rounded-full">Todas</button>
+        <button onclick="setFilter('pending')"   id="f-pending"   class="ftab flex-1 py-2.5 rounded-full">Pendientes</button>
+        <button onclick="setFilter('completed')" id="f-completed" class="ftab flex-1 py-2.5 rounded-full">Completadas</button>
+    </div>
+
+    <!-- ── Task list ── -->
+    <div id="task-list" class="space-y-4"></div>
+
+    <!-- ── Export ── -->
+    <div class="flex gap-3 mt-10">
+        <button onclick="exportCSV()"
+                class="flex-1 inp py-4 rounded-3xl font-semibold flex items-center justify-center gap-2 hover:bg-emerald-50"
+                style="color:#059669">
+            <i class="fas fa-file-excel"></i> Excel
+        </button>
+        <button onclick="exportPDF()"
+                class="flex-1 inp py-4 rounded-3xl font-semibold flex items-center justify-center gap-2 hover:bg-red-50"
+                style="color:#DC2626">
+            <i class="fas fa-file-pdf"></i> PDF
+        </button>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     CLOCK MODAL
+════════════════════════════════════════════════ -->
+<div id="clock-modal" class="hidden fixed inset-0 flex items-center justify-center"
+     style="background:rgba(0,0,0,.45); z-index:200;">
+    <div class="card rounded-3xl p-6 mx-4 w-full max-w-[340px] shadow-2xl">
+
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-lg font-bold">Establecer hora</h3>
+            <button onclick="closeClock()" class="text-2xl leading-none" style="color:var(--muted)">×</button>
+        </div>
+
+        <!-- Digital + AM/PM -->
+        <div class="text-center mb-4">
+            <div id="clock-digital"
+                 class="text-5xl font-bold tabular-nums"
+                 style="color:var(--accent); letter-spacing:-2px">12:00</div>
+            <div class="flex justify-center gap-3 mt-3">
+                <button id="am-btn" onclick="setAMPM('AM')" class="ampm on">AM</button>
+                <button id="pm-btn" onclick="setAMPM('PM')" class="ampm">PM</button>
+            </div>
+        </div>
+
+        <!-- SVG Clock -->
+        <div class="flex justify-center mb-3">
+            <svg id="clock-svg" viewBox="0 0 300 300" width="264" height="264"
+                 onmousemove="onClockMove(event)" ontouchmove="onClockMove(event)"
+                 onmouseup="endDrag()" ontouchend="endDrag()" onmouseleave="endDrag()">
+
+                <!-- Outer ring -->
+                <circle cx="150" cy="150" r="143" fill="#EDE8DC" stroke="#D4CBBA" stroke-width="2"/>
+                <!-- Inner face -->
+                <circle cx="150" cy="150" r="128" fill="#FFFCF5" stroke="#D4CBBA" stroke-width="1"/>
+
+                <!-- Ticks & numbers generated by JS -->
+                <g id="clk-ticks"></g>
+                <g id="clk-nums"></g>
+
+                <!-- Hands -->
+                <line id="hour-hand" x1="150" y1="150" x2="150" y2="88" class="h-hand"/>
+                <line id="minute-hand" x1="150" y1="150" x2="150" y2="62" class="m-hand"/>
+
+                <!-- Centre -->
+                <circle cx="150" cy="150" r="7" fill="#C8603A"/>
+                <circle cx="150" cy="150" r="3" fill="#fff"/>
+
+                <!-- Draggable knobs -->
+                <circle id="hour-knob"   cx="150" cy="88" r="13" class="knob-h" opacity=".85"
+                        onmousedown="startDrag('hour')"   ontouchstart="startDrag('hour')"/>
+                <circle id="minute-knob" cx="150" cy="62" r="11" class="knob"   opacity=".9"
+                        onmousedown="startDrag('minute')" ontouchstart="startDrag('minute')"/>
+            </svg>
+        </div>
+
+        <p class="text-center text-[11px] mb-5" style="color:var(--muted)">
+            <span style="color:#1C1814">●</span> Arrastra el círculo oscuro = horas &nbsp;·&nbsp;
+            <span style="color:#C8603A">●</span> Círculo terracota = minutos
+        </p>
+
+        <div class="flex gap-3">
+            <button onclick="clearClock()"
+                    class="flex-1 inp py-3 rounded-2xl font-semibold text-sm"
+                    style="color:var(--muted)">
+                Borrar hora
+            </button>
+            <button onclick="confirmClock()" class="flex-1 btn-a py-3 rounded-2xl font-semibold text-sm">
+                Confirmar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     SETTINGS MODAL
+════════════════════════════════════════════════ -->
+<div id="settings-modal" class="hidden fixed inset-0 flex items-end"
+     style="background:rgba(0,0,0,.5); z-index:200;">
+    <div class="card w-full rounded-t-3xl p-6 max-h-[80vh] overflow-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-2xl font-bold">Ajustes</h2>
+            <button onclick="hideSettings()" class="text-3xl leading-none" style="color:var(--muted)">×</button>
+        </div>
+
+        <p class="text-xs font-semibold uppercase tracking-wide mb-3" style="color:var(--muted)">Categorías</p>
+        <div id="projects-list" class="space-y-2 mb-6"></div>
+        <button onclick="addNewProject()"
+                class="w-full inp py-3 rounded-2xl text-sm font-semibold text-center"
+                style="color:var(--accent); border-color:var(--accent)">
+            <i class="fas fa-plus mr-2"></i>Nueva categoría
+        </button>
+
+        <button onclick="hideSettings()" class="mt-8 w-full btn-a py-4 rounded-3xl font-bold">
+            Guardar y cerrar
+        </button>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════ -->
+<script>
+/* ── State ── */
+let tasks = [];
+let projects = ["Instituto","Exámenes","Casa","Dinero","Novia","Ismael","Compra","Otros"];
+let currentProject = "Instituto";
+let currentFilter  = "all";
+const STORAGE_KEY  = "precrastinar_v1";
+
+const reminderLabels = {
+    no:'', '1h':'⏰ 1h antes', '2h':'⏰ 2h antes',
+    '1d':'⏰ 1 día antes', '2d':'⏰ 2 días antes'
+};
+
+/* ═══════════════════════════════════════════════
+   CLOCK
+═══════════════════════════════════════════════ */
+const CX = 150, CY = 150;
+let cHours   = 0;   // 0-11
+let cMinutes = 0;
+let cIsPM    = false;
+let dragging = null;
+
+function initClockFace() {
+    const ticks = document.getElementById('clk-ticks');
+    const nums  = document.getElementById('clk-nums');
+    const ns = 'http://www.w3.org/2000/svg';
+
+    /* tick marks */
+    for (let i = 0; i < 60; i++) {
+        const ang  = (i / 60) * 2 * Math.PI - Math.PI / 2;
+        const hour = (i % 5 === 0);
+        const r1   = hour ? 108 : 117;
+        const r2   = 125;
+        const ln   = document.createElementNS(ns, 'line');
+        ln.setAttribute('x1', CX + r1 * Math.cos(ang));
+        ln.setAttribute('y1', CY + r1 * Math.sin(ang));
+        ln.setAttribute('x2', CX + r2 * Math.cos(ang));
+        ln.setAttribute('y2', CY + r2 * Math.sin(ang));
+        ln.setAttribute('stroke', hour ? '#1C1814' : '#C4B9AA');
+        ln.setAttribute('stroke-width', hour ? '2.5' : '1');
+        ticks.appendChild(ln);
+    }
+
+    /* hour numbers */
+    for (let h = 1; h <= 12; h++) {
+        const ang = (h / 12) * 2 * Math.PI - Math.PI / 2;
+        const r   = 92;
+        const tx  = document.createElementNS(ns, 'text');
+        tx.setAttribute('x', CX + r * Math.cos(ang));
+        tx.setAttribute('y', CY + r * Math.sin(ang));
+        tx.setAttribute('text-anchor', 'middle');
+        tx.setAttribute('dominant-baseline', 'central');
+        tx.setAttribute('font-family', 'Inter, sans-serif');
+        tx.setAttribute('font-size', '14');
+        tx.setAttribute('font-weight', '700');
+        tx.setAttribute('fill', '#1C1814');
+        tx.textContent = h;
+        nums.appendChild(tx);
+    }
+}
+
+function openClock() {
+    const saved = document.getElementById('new-time').value;
+    if (saved) {
+        const [hStr, mStr] = saved.split(':');
+        const h24 = parseInt(hStr);
+        cMinutes  = parseInt(mStr);
+        cIsPM     = h24 >= 12;
+        cHours    = h24 % 12;
+    } else {
+        const now = new Date();
+        cHours   = now.getHours() % 12;
+        cMinutes = now.getMinutes();
+        cIsPM    = now.getHours() >= 12;
+    }
+    syncAMPMButtons();
+    updateClock();
+    document.getElementById('clock-modal').classList.remove('hidden');
+}
+
+function closeClock()   { document.getElementById('clock-modal').classList.add('hidden'); dragging = null; }
+function showSettings() { renderProjects(); document.getElementById('settings-modal').classList.remove('hidden'); }
+function hideSettings() { document.getElementById('settings-modal').classList.add('hidden'); saveData(); }
+
+function clearClock() {
+    document.getElementById('new-time').value   = '';
+    document.getElementById('time-display').textContent = '--:--';
+    document.getElementById('time-display').style.color = 'var(--muted)';
+    closeClock();
+}
+
+function confirmClock() {
+    const h24 = cIsPM ? (cHours === 0 ? 12 : cHours + 12) : cHours;
+    const hh  = String(h24).padStart(2,'0');
+    const mm  = String(cMinutes).padStart(2,'0');
+    document.getElementById('new-time').value = `${hh}:${mm}`;
+    const disp12 = cHours === 0 ? 12 : cHours;
+    const suf    = cIsPM ? 'PM' : 'AM';
+    document.getElementById('time-display').textContent  = `${disp12}:${mm} ${suf}`;
+    document.getElementById('time-display').style.color  = 'var(--accent)';
+    closeClock();
+}
+
+function setAMPM(val) {
+    cIsPM = (val === 'PM');
+    syncAMPMButtons();
+    updateClock();
+}
+
+function syncAMPMButtons() {
+    document.getElementById('am-btn').classList.toggle('on', !cIsPM);
+    document.getElementById('pm-btn').classList.toggle('on',  cIsPM);
+}
+
+function updateClock() {
+    const toRad = deg => (deg - 90) * Math.PI / 180;
+    const hAng  = (cHours / 12) * 360 + (cMinutes / 60) * 30;
+    const mAng  = (cMinutes / 60) * 360;
+    const hLen  = 62, mLen = 87;
+
+    const hx = CX + hLen * Math.cos(toRad(hAng));
+    const hy = CY + hLen * Math.sin(toRad(hAng));
+    const mx = CX + mLen * Math.cos(toRad(mAng));
+    const my = CY + mLen * Math.sin(toRad(mAng));
+
+    document.getElementById('hour-hand').setAttribute('x2', hx);
+    document.getElementById('hour-hand').setAttribute('y2', hy);
+    document.getElementById('minute-hand').setAttribute('x2', mx);
+    document.getElementById('minute-hand').setAttribute('y2', my);
+    document.getElementById('hour-knob').setAttribute('cx', hx);
+    document.getElementById('hour-knob').setAttribute('cy', hy);
+    document.getElementById('minute-knob').setAttribute('cx', mx);
+    document.getElementById('minute-knob').setAttribute('cy', my);
+
+    const d12 = cHours === 0 ? 12 : cHours;
+    const suf = cIsPM ? ' PM' : ' AM';
+    document.getElementById('clock-digital').textContent = `${d12}:${String(cMinutes).padStart(2,'0')}`;
+}
+
+function startDrag(type) { dragging = type; }
+
+function onClockMove(e) {
+    if (!dragging) return;
+    e.preventDefault();
+    const svg  = document.getElementById('clock-svg');
+    const rect = svg.getBoundingClientRect();
+    const cx   = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy   = e.touches ? e.touches[0].clientY : e.clientY;
+    const sx   = 300 / rect.width;
+    const sy   = 300 / rect.height;
+    const x    = (cx - rect.left) * sx;
+    const y    = (cy - rect.top)  * sy;
+
+    let ang = Math.atan2(y - CY, x - CX) * 180 / Math.PI + 90;
+    if (ang < 0) ang += 360;
+
+    if (dragging === 'hour') {
+        cHours   = Math.round(ang / 30) % 12;
+    } else {
+        cMinutes = Math.round(ang / 6) % 60;
+    }
+    updateClock();
+}
+
+function endDrag() { dragging = null; }
+
+/* ═══════════════════════════════════════════════
+   DATA
+═══════════════════════════════════════════════ */
+function loadData() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+        const d = JSON.parse(saved);
+        tasks          = d.tasks          || [];
+        projects       = d.projects       || projects;
+        currentProject = d.currentProject || "Instituto";
+    } else {
+        tasks = [
+            { id:1, text:"Corregir exámenes de Filosofía",  done:false, due:"2026-04-10", time:"",      priority:"alta",  project:"Instituto", subtasks:[], reminder:"1d" },
+            { id:2, text:"Preparar clase sobre Kant",        done:false, due:"2026-04-07", time:"09:00", priority:"media", project:"Instituto", subtasks:[], reminder:"2h" },
+            { id:3, text:"Comprar café y leche",             done:false, due:"2026-04-05", time:"",      priority:"baja",  project:"Compra",    subtasks:[], reminder:"no" }
+        ];
+    }
+    renderProjects();
+    renderTasks();
+    requestNotificationPermission();
+}
+
+function saveData() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks, projects, currentProject }));
+}
+
+/* ═══════════════════════════════════════════════
+   PROJECTS
+═══════════════════════════════════════════════ */
+function renderProjects() {
+    const sel = document.getElementById('project-select');
+    sel.innerHTML = projects.map(p =>
+        `<option value="${p}" ${p===currentProject?'selected':''}>${p}</option>`
+    ).join('');
+
+    document.getElementById('projects-list').innerHTML = projects.map((p,i) => `
+        <div class="flex items-center justify-between inp px-5 py-3 rounded-2xl">
+            <span class="font-medium">${p}</span>
+            ${i >= 8
+                ? `<button onclick="deleteProject(${i})" class="text-xs font-bold" style="color:#DC2626">Eliminar</button>`
+                : `<span class="text-xs" style="color:var(--muted)">predefinida</span>`}
+        </div>
+    `).join('');
+}
+
+function changeProject() {
+    currentProject = document.getElementById('project-select').value;
+    saveData();
+    renderTasks();
+}
+
+function addNewProject() {
+    const name = prompt("Nombre de la nueva categoría:");
+    if (name && !projects.includes(name)) {
+        projects.push(name);
+        renderProjects();
+        saveData();
+    }
+}
+
+function deleteProject(index) {
+    if (confirm("¿Eliminar esta categoría?")) {
+        projects.splice(index, 1);
+        currentProject = projects[0] || "Instituto";
+        renderProjects();
+        saveData();
+        renderTasks();
+    }
+}
+
+/* ═══════════════════════════════════════════════
+   TASKS
+═══════════════════════════════════════════════ */
+function addNewTask() {
+    const text = document.getElementById('new-task').value.trim();
+    if (!text) return;
+
+    tasks.unshift({
+        id:       Date.now(),
+        text,
+        done:     false,
+        due:      document.getElementById('new-due').value,
+        time:     document.getElementById('new-time').value,
+        priority: document.getElementById('new-priority').value,
+        reminder: document.getElementById('new-reminder').value,
+        project:  currentProject,
+        subtasks: []
+    });
+
+    document.getElementById('new-task').value  = '';
+    document.getElementById('new-due').value   = '';
+    document.getElementById('new-time').value  = '';
+    document.getElementById('time-display').textContent = '--:--';
+    document.getElementById('time-display').style.color = 'var(--muted)';
+
+    saveData();
+    renderTasks();
+}
+
+function toggleTask(id) {
+    const t = tasks.find(t => t.id === id);
+    if (t) t.done = !t.done;
+    saveData();
+    renderTasks();
+}
+
+function deleteTask(id) {
+    if (confirm('¿Eliminar esta tarea?')) {
+        tasks = tasks.filter(t => t.id !== id);
+        saveData();
+        renderTasks();
+    }
+}
+
+function addSubtask(taskId) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const text = prompt("Texto de la subtarea:");
+    if (text) {
+        task.subtasks.push({ id: Date.now(), text, done: false });
+        saveData();
+        renderTasks();
+    }
+}
+
+function toggleSubtask(taskId, subId) {
+    const task = tasks.find(t => t.id === taskId);
+    const sub  = task && task.subtasks.find(s => s.id === subId);
+    if (sub) sub.done = !sub.done;
+    saveData();
+    renderTasks();
+}
+
+/* ── Render ── */
+function fmtTime(timeStr) {
+    if (!timeStr) return '';
+    const [h, m] = timeStr.split(':');
+    const hNum  = parseInt(h);
+    const suf   = hNum >= 12 ? 'PM' : 'AM';
+    const h12   = hNum % 12 === 0 ? 12 : hNum % 12;
+    return `${h12}:${m} ${suf}`;
+}
+
+function renderTasks() {
+    const container = document.getElementById('task-list');
+    container.innerHTML = '';
+
+    let list = tasks.filter(t => t.project === currentProject);
+    if (currentFilter === 'pending')   list = list.filter(t => !t.done);
+    if (currentFilter === 'completed') list = list.filter(t =>  t.done);
+    list.sort((a,b) => (a.done?1:0)-(b.done?1:0) || (a.due||'9999').localeCompare(b.due||'9999'));
+
+    if (!list.length) {
+        container.innerHTML = `<p class="text-center py-20" style="color:var(--muted)">Sin tareas en esta categoría</p>`;
+        return;
+    }
+
+    list.forEach(task => {
+        const overdue   = task.due && new Date(task.due) < new Date() && !task.done;
+        const prioClass = {alta:'p-alta', media:'p-media', baja:'p-baja'}[task.priority];
+        const prioLbl   = {alta:'ALTA',   media:'MEDIA',   baja:'BAJA'}[task.priority];
+        const remLbl    = reminderLabels[task.reminder] || '';
+
+        let dateStr = '';
+        if (task.due) {
+            dateStr = new Date(task.due + 'T12:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+            if (task.time) dateStr += ` · ${fmtTime(task.time)}`;
+        }
+
+        container.innerHTML += `
+        <div class="task-item card rounded-3xl p-5">
+            <div class="flex gap-4">
+                <!-- Checkbox -->
+                <div onclick="toggleTask(${task.id})" class="cursor-pointer pt-0.5 flex-shrink-0">
+                    <div class="${task.done?'done-check':''} w-7 h-7 rounded-2xl flex items-center justify-center"
+                         style="${task.done?'':'border:2px solid var(--border)'}">
+                        ${task.done?'<i class="fas fa-check text-white text-sm"></i>':''}
+                    </div>
+                </div>
+                <!-- Content -->
+                <div class="flex-1 min-w-0">
+                    <p class="text-[17px] font-medium leading-snug ${task.done?'line-through':''}"
+                       style="color:${task.done?'var(--muted)':'var(--text)'}">
+                        ${task.text}
+                    </p>
+                    <div class="flex flex-wrap gap-2 mt-2.5 items-center text-xs">
+                        ${dateStr ? `<span style="color:${overdue?'#DC2626':'var(--muted)'}">
+                            <i class="fas fa-calendar-day mr-1"></i>${dateStr}
+                        </span>` : ''}
+                        <span class="px-3 py-0.5 rounded-full border font-semibold ${prioClass}">${prioLbl}</span>
+                        ${remLbl ? `<span class="rem-chip px-2.5 py-0.5 rounded-full font-medium">${remLbl}</span>` : ''}
+                    </div>
+
+                    <!-- Subtasks -->
+                    <div class="mt-4">
+                        <div onclick="this.nextElementSibling.classList.toggle('hidden')"
+                             class="text-xs flex items-center gap-1.5 cursor-pointer select-none"
+                             style="color:var(--muted)">
+                            <i class="fas fa-list-check"></i>
+                            ${task.subtasks.length} subtarea${task.subtasks.length!==1?'s':''}
+                        </div>
+                        <div class="hidden mt-3 space-y-2 pl-5">
+                            ${task.subtasks.map(sub => `
+                            <div class="flex items-center gap-3 text-sm">
+                                <div onclick="toggleSubtask(${task.id},${sub.id})" class="cursor-pointer flex-shrink-0">
+                                    <div class="${sub.done?'done-check':''} w-5 h-5 rounded-xl flex items-center justify-center"
+                                         style="${sub.done?'':'border:1px solid var(--border)'}">
+                                        ${sub.done?'<i class="fas fa-check text-[10px] text-white"></i>':''}
+                                    </div>
+                                </div>
+                                <span class="${sub.done?'line-through':''}"
+                                      style="color:${sub.done?'var(--muted)':'var(--text)'}">
+                                    ${sub.text}
+                                </span>
+                            </div>`).join('')}
+                            <button onclick="addSubtask(${task.id})"
+                                    class="text-xs font-semibold flex items-center gap-1 mt-1"
+                                    style="color:var(--accent)">
+                                <i class="fas fa-plus"></i> Añadir subtarea
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Delete -->
+                <button onclick="deleteTask(${task.id})"
+                        class="flex-shrink-0 opacity-25 hover:opacity-100 transition-opacity"
+                        style="color:#DC2626">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>`;
+    });
+}
+
+/* ═══════════════════════════════════════════════
+   FILTERS
+═══════════════════════════════════════════════ */
+function setFilter(f) {
+    currentFilter = f;
+    ['all','pending','completed'].forEach(id => {
+        document.getElementById(`f-${id}`).classList.toggle('active', id === f);
+    });
+    renderTasks();
+}
+
+/* ═══════════════════════════════════════════════
+   NOTIFICATIONS
+═══════════════════════════════════════════════ */
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default')
+        Notification.requestPermission();
+}
+
+/* ═══════════════════════════════════════════════
+   EXPORT
+═══════════════════════════════════════════════ */
+function exportCSV() {
+    let csv = "Tarea,Hecha,Fecha,Hora,Prioridad,Recordatorio,Categoría,Subtareas\n";
+    tasks.forEach(t => {
+        csv += `"${t.text}",${t.done},"${t.due||''}","${t.time||''}",${t.priority},"${t.reminder||'no'}","${t.project}","${t.subtasks.map(s=>s.text).join('; ')}"\n`;
+    });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+    a.download = 'precrastinar.csv';
+    a.click();
+}
+
+function exportPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.setFont('helvetica','bold');
+    doc.text("PreCrastinar — Tareas", 20, 18);
+    doc.setFont('helvetica','normal');
+    let y = 34;
+    tasks.forEach((t,i) => {
+        doc.text(`${i+1}. ${t.text} ${t.done?'[✓]':''}`, 20, y);
+        const info = [t.due, t.time ? fmtTime(t.time) : '', t.priority.toUpperCase(), reminderLabels[t.reminder]||''].filter(Boolean).join(' · ');
+        if (info) { doc.setFontSize(9); doc.text(info, 25, y+6); doc.setFontSize(12); y += 4; }
+        y += 14;
+        if (y > 260) { doc.addPage(); y = 20; }
+    });
+    doc.save('precrastinar.pdf');
+}
+
+/* ═══════════════════════════════════════════════
+   BOOT
+═══════════════════════════════════════════════ */
+window.onload = () => {
+    initClockFace();
+    loadData();
+    setFilter('all');
+};
+</script>
+</body>
+</html>
