@@ -896,11 +896,11 @@ function exportPDF() {
 /* ═══════════════════════════════════════════════
    BOOT
 ═══════════════════════════════════════════════ */
-window.onload = () => {
+window.addEventListener('load', function() {
     initClockFace();
     loadData();
     setFilter('all');
-};
+});
 
 
 /* ═══════════════════════════════════════════════
@@ -1061,9 +1061,12 @@ function addHour(time) {
     return `${String(nh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 }
 
-// Cerrar modal al tocar fuera
-document.getElementById('gcal-modal').addEventListener('click', function(e) {
-    if (e.target === this) closeGcal();
+// Cerrar modal al tocar fuera (se registra tras cargar el DOM)
+window.addEventListener('load', function() {
+    var m = document.getElementById('gcal-modal');
+    if (m) m.addEventListener('click', function(e) {
+        if (e.target === this) closeGcal();
+    });
 });
 
 // ═══════════════════════════════════════════════
