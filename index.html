@@ -95,6 +95,58 @@
             50%      { box-shadow: 0 0 0 9px rgba(181,101,29,.08); }
         }
     </style>
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp }                        from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey:            "AIzaSyC1JHv33af8G0cwdcsuWZtXVYnwECAOpt0",
+      authDomain:        "precrastinar.firebaseapp.com",
+      projectId:         "precrastinar",
+      storageBucket:     "precrastinar.firebasestorage.app",
+      messagingSenderId: "350703432127",
+      appId:             "1:350703432127:web:b67918792e91d816acb10a"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+    const REF = doc(db, "precrastinar", "datos");
+
+    // Escuchar cambios en tiempo real desde Firestore (sincronización entre dispositivos)
+    onSnapshot(REF, (snap) => {
+      if (!snap.exists()) return;
+      if (window._ignorarSnapshot) { window._ignorarSnapshot = false; return; }
+      const d = snap.data();
+      // Actualizar variables del script principal via función global
+      if (typeof window.syncFromCloud === 'function') {
+        window.syncFromCloud(d.tasks || [], d.projects, d.currentProject);
+      }
+    });
+
+    // Guardar en Firestore
+    window.saveToCloud = async function(tasks, projects, currentProject) {
+      try {
+        window._ignorarSnapshot = true;
+        await setDoc(REF, { tasks, projects, currentProject });
+      } catch(e) {
+        console.warn("Error guardando en Firestore:", e);
+      }
+    };
+
+    // Carga inicial desde Firestore
+    window.loadFromCloud = async function() {
+      try {
+        const { getDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+        const snap = await getDoc(REF);
+        if (snap.exists()) {
+          window._cloudData = snap.data();
+        }
+      } catch(e) {
+        console.warn("Error cargando desde Firestore:", e);
+      }
+    };
+  </script>
 </head>
 <body>
 <div class="max-w-[430px] mx-auto p-4 pb-28">
@@ -323,8 +375,8 @@
 ════════════════════════════════════════════════ -->
 <script>
 /* ── State ── */
-let tasks = [];
-let projects = ["Instituto","Exámenes","Casa","Dinero","Novia","Ismael","Compra","Otros"];
+let tasks          = [];
+let projects       = ["Instituto","Exámenes","Casa","Dinero","Novia","Ismael","Compra","Otros"];
 let currentProject = "Instituto";
 let currentFilter  = "all";
 const STORAGE_KEY  = "precrastinar_v1";
@@ -490,19 +542,25 @@ function endDrag() { dragging = null; }
 /* ═══════════════════════════════════════════════
    DATA
 ═══════════════════════════════════════════════ */
-function loadData() {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-        const d = JSON.parse(saved);
-        tasks          = d.tasks          || [];
-        projects       = d.projects       || projects;
-        currentProject = d.currentProject || "Instituto";
+async function loadData() {
+    // Intentar cargar desde Firestore primero
+    if (typeof window.loadFromCloud === 'function') {
+        await window.loadFromCloud();
+        // Sincronizar variables locales con lo cargado por Firebase
+        if (window._cloudData) {
+            tasks          = window._cloudData.tasks          || tasks;
+            projects       = window._cloudData.projects       || projects;
+            currentProject = window._cloudData.currentProject || currentProject;
+        }
     } else {
-        tasks = [
-            { id:1, text:"Corregir exámenes de Filosofía",  done:false, due:"2026-04-10", time:"",      priority:"alta",  project:"Instituto", subtasks:[], reminder:"1d" },
-            { id:2, text:"Preparar clase sobre Kant",        done:false, due:"2026-04-07", time:"09:00", priority:"media", project:"Instituto", subtasks:[], reminder:"2h" },
-            { id:3, text:"Comprar café y leche",             done:false, due:"2026-04-05", time:"",      priority:"baja",  project:"Compra",    subtasks:[], reminder:"no" }
-        ];
+        // Fallback: localStorage
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            const d    = JSON.parse(saved);
+            tasks          = d.tasks          || [];
+            projects       = d.projects       || projects;
+            currentProject = d.currentProject || "Instituto";
+        }
     }
     renderProjects();
     renderTasks();
@@ -510,8 +568,22 @@ function loadData() {
 }
 
 function saveData() {
+    // Guardar siempre en localStorage como respaldo
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks, projects, currentProject }));
+    // Guardar en la nube
+    if (typeof window.saveToCloud === 'function') {
+        window.saveToCloud(tasks, projects, currentProject);
+    }
 }
+
+// Llamada desde el módulo Firebase cuando llegan datos de otro dispositivo
+window.syncFromCloud = function(newTasks, newProjects, newCurrentProject) {
+    tasks          = newTasks;
+    if (newProjects)       projects       = newProjects;
+    if (newCurrentProject) currentProject = newCurrentProject;
+    renderProjects();
+    renderTasks();
+};
 
 /* ═══════════════════════════════════════════════
    PROJECTS
