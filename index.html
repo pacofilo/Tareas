@@ -186,6 +186,13 @@
       }
     };
   </script>
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#b5651d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="PreCrastinar">
+  <link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
 <div class="max-w-[430px] mx-auto p-4 pb-28">
@@ -900,6 +907,12 @@ window.addEventListener('load', function() {
     initClockFace();
     loadData();
     setFilter('all');
+    // Registrar Service Worker para PWA
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/Tareas/sw.js')
+            .then(() => console.log('SW registrado'))
+            .catch(e => console.warn('SW error:', e));
+    }
 });
 
 
