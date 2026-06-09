@@ -79,6 +79,21 @@
         ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
         ::placeholder { color: var(--muted); opacity: .7; }
+
+        /* ── Micrófono ── */
+        .mic-btn { cursor:pointer; outline:none; transition: all .2s; }
+        .mic-btn:hover { filter: brightness(1.15); transform: scale(1.07); }
+        .mic-btn.escuchando {
+            background: var(--accent) !important;
+            color: #fff !important;
+            border-color: var(--accent2) !important;
+            animation: mic-pulso 1.1s ease-in-out infinite;
+        }
+        .mic-btn:disabled { opacity:.35; cursor:not-allowed; }
+        @keyframes mic-pulso {
+            0%,100% { box-shadow: 0 0 0 3px rgba(181,101,29,.3); }
+            50%      { box-shadow: 0 0 0 9px rgba(181,101,29,.08); }
+        }
     </style>
 </head>
 <body>
@@ -117,9 +132,23 @@
 
     <!-- ── Add task ── -->
     <div class="card rounded-3xl p-5 mb-6">
-        <input id="new-task" type="text" placeholder="Nueva tarea..."
-               class="w-full bg-transparent outline-none text-xl font-medium mb-4 pb-3"
-               style="border-bottom:1px solid var(--border)">
+        <!-- ── Input + micrófono ── -->
+        <div class="flex items-center gap-2 mb-4 pb-3" style="border-bottom:1px solid var(--border)">
+            <input id="new-task" type="text" placeholder="Nueva tarea..."
+                   class="flex-1 bg-transparent outline-none text-xl font-medium"
+                   style="min-width:0">
+            <button id="mic-btn" type="button"
+                    title="Dictar tarea por voz"
+                    aria-label="Activar micrófono"
+                    onclick="toggleMic()"
+                    class="mic-btn flex-shrink-0 flex items-center justify-center rounded-full border-2 transition-all"
+                    style="width:42px;height:42px;border-color:var(--accent);color:var(--accent);background:var(--bg-input)">
+                <svg id="mic-icon" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                    <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z"/>
+                    <path d="M19 10a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V19H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.08A7 7 0 0 0 19 10z"/>
+                </svg>
+            </button>
+        </div>
 
         <!-- Row 1: Fecha + Hora -->
         <div class="grid grid-cols-2 gap-3 mb-3">
@@ -750,6 +779,119 @@ window.onload = () => {
     loadData();
     setFilter('all');
 };
+
+// ═══════════════════════════════════════════════
+// MICRÓFONO — Web Speech API (Android-compatible)
+// ═══════════════════════════════════════════════
+(function () {
+
+  // Android Chrome solo expone webkitSpeechRecognition
+  var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var btn   = document.getElementById('mic-btn');
+  var input = document.getElementById('new-task');
+
+  // Si el navegador no soporta la API, deshabilitar
+  if (!SpeechRec) {
+    if (btn) {
+      btn.disabled = true;
+      btn.title    = 'Tu navegador no soporta reconocimiento de voz';
+      btn.style.opacity = '0.3';
+    }
+    return;
+  }
+
+  var activo    = false;
+  var textoBase = '';
+  var rec       = null;
+
+  // Crear una nueva instancia cada vez (Android no reutiliza bien la misma)
+  function crearRec() {
+    var r             = new SpeechRec();
+    r.lang            = 'es-ES';
+    r.interimResults  = true;
+    r.maxAlternatives = 1;
+    r.continuous      = false;
+
+    r.onstart = function () {
+      activo    = true;
+      textoBase = input.value.trim();
+      btn.classList.add('escuchando');
+      btn.setAttribute('aria-label', 'Escuchando… pulsa para parar');
+    };
+
+    r.onresult = function (e) {
+      var res   = e.results[e.results.length - 1];
+      var texto = res[0].transcript;
+      var sep   = textoBase.length > 0 ? ' ' : '';
+      if (res.isFinal) {
+        input.value = textoBase + sep + cap(texto.trim());
+        // Notificar a cualquier listener del input
+        try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch(x) {}
+      } else {
+        // Resultado provisional: muestra en tiempo real
+        input.value = textoBase + sep + texto;
+      }
+    };
+
+    r.onerror = function (e) {
+      // 'aborted' lo lanza Android al parar manualmente: ignorar
+      if (e.error === 'aborted' || e.error === 'no-speech') {
+        parar();
+        return;
+      }
+      var msgs = {
+        'not-allowed'       : '🔒 Permiso de micrófono denegado.\nVe a Ajustes > Apps > Chrome > Permisos y activa el Micrófono.',
+        'network'           : '⚠️ Error de red. Comprueba tu conexión.',
+        'service-not-allowed': '🔒 Servicio de voz no permitido en este contexto.',
+      };
+      var msg = msgs[e.error] || ('Error: ' + e.error);
+      alert(msg);
+      parar();
+    };
+
+    r.onend = function () {
+      // onend siempre se llama al terminar, tanto si hay resultado como si no
+      parar();
+    };
+
+    return r;
+  }
+
+  function parar() {
+    activo = false;
+    btn.classList.remove('escuchando');
+    btn.setAttribute('aria-label', 'Activar micrófono');
+    input.focus();
+  }
+
+  function cap(s) {
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  }
+
+  // Función global llamada desde onclick del botón
+  window.toggleMic = function () {
+    if (activo) {
+      // Parar escucha
+      try { rec.stop(); } catch(e) {}
+      parar();
+    } else {
+      // Crear instancia nueva en cada uso (soluciona el bug de Android)
+      rec = crearRec();
+      try {
+        rec.start();
+      } catch (e) {
+        // Si falla al arrancar (p.ej. ya hay una instancia activa), reintentar
+        setTimeout(function () {
+          try {
+            rec = crearRec();
+            rec.start();
+          } catch (e2) {
+            alert('No se pudo activar el micrófono. Inténtalo de nuevo.');
+          }
+        }, 300);
+      }
+    }
+  };
+
+})();
 </script>
-</body>
-</html>
