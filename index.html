@@ -113,7 +113,8 @@
             align-items: flex-end; justify-content: center;
             padding-bottom: 24px;
         }
-        #gcal-modal.hidden { display: none; }
+        #gcal-modal         { display: flex; }
+        #gcal-modal.hidden  { display: none !important; }
         #gcal-panel {
             background: var(--bg-card); border-radius: 24px;
             padding: 24px; width: 100%; max-width: 430px;
@@ -1182,7 +1183,7 @@ document.getElementById('gcal-modal').addEventListener('click', function(e) {
 </script>
 
     <!-- ══ MODAL GOOGLE CALENDAR ══ -->
-    <div id="gcal-modal" class="hidden" style="position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;padding-bottom:24px;">
+    <div id="gcal-modal" class="hidden" style="position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.45);align-items:flex-end;justify-content:center;padding-bottom:24px;">
         <div id="gcal-panel" style="background:var(--bg-card);border-radius:24px;padding:24px;width:100%;max-width:430px;box-shadow:0 8px 32px rgba(0,0,0,.18);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
                 <h2 style="font-weight:700;font-size:1.1rem;">📅 Google Calendar</h2>
