@@ -1,12 +1,14 @@
 {
-  "name": "TaskFlow Trabajo v2.0",
-  "short_name": "TaskFlow",
-  "description": "Gestor de tareas y proyectos simple y potente",
-  "start_url": "./index.html",
+  "name": "PreCrastinar",
+  "short_name": "PreCrastinar",
+  "description": "Gestión personal de tareas",
+  "start_url": "/Tareas/",
+  "scope": "/Tareas/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#3b82f6",
-  "orientation": "portrait-primary",
+  "orientation": "portrait",
+  "background_color": "#F5F0E8",
+  "theme_color": "#b5651d",
+  "lang": "es",
   "icons": [
     {
       "src": "icon-192.png",
@@ -21,5 +23,4 @@
       "purpose": "any maskable"
     }
   ]
-
 }
