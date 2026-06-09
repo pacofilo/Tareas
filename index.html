@@ -94,6 +94,44 @@
             0%,100% { box-shadow: 0 0 0 3px rgba(181,101,29,.3); }
             50%      { box-shadow: 0 0 0 9px rgba(181,101,29,.08); }
         }
+
+        /* ── Google Calendar ── */
+        .gcal-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #fff; border: 1.5px solid #dadce0;
+            border-radius: 999px; padding: 6px 14px;
+            font-size: 12px; font-weight: 600; color: #3c4043;
+            cursor: pointer; transition: box-shadow .2s, background .2s;
+            text-decoration: none; white-space: nowrap;
+        }
+        .gcal-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,.15); background: #f8f9fa; }
+        .gcal-btn img  { width: 16px; height: 16px; }
+
+        #gcal-modal {
+            position: fixed; inset: 0; z-index: 999;
+            background: rgba(0,0,0,.45); display: flex;
+            align-items: flex-end; justify-content: center;
+            padding-bottom: 24px;
+        }
+        #gcal-modal.hidden { display: none; }
+        #gcal-panel {
+            background: var(--bg-card); border-radius: 24px;
+            padding: 24px; width: 100%; max-width: 430px;
+            box-shadow: 0 8px 32px rgba(0,0,0,.18);
+        }
+        .gcal-task-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 0; border-bottom: 1px solid var(--border);
+        }
+        .gcal-task-row:last-child { border-bottom: none; }
+        .gcal-send-btn {
+            margin-left: auto; background: #1a73e8; color: #fff;
+            border: none; border-radius: 999px; padding: 5px 12px;
+            font-size: 12px; font-weight: 600; cursor: pointer;
+            white-space: nowrap;
+        }
+        .gcal-send-btn:hover { background: #1557b0; }
+        .gcal-send-btn.enviado { background: #34a853; }
     </style>
   <!-- Firebase -->
   <script type="module">
@@ -163,11 +201,22 @@
                 <p class="text-xs leading-none mt-0.5" style="color:var(--muted)">Gestión personal</p>
             </div>
         </div>
-        <button onclick="showSettings()"
-                class="w-11 h-11 card rounded-full flex items-center justify-center"
-                style="color:var(--muted)">
-            <i class="fas fa-cog text-xl"></i>
-        </button>
+        <div class="flex items-center gap-2">
+            <!-- Botón Google Calendar -->
+            <button onclick="openGcal()"
+                    class="gcal-btn"
+                    title="Google Calendar">
+                <img src="https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_today_2x.png"
+                     onerror="this.style.display='none'"
+                     alt="">
+                <span id="gcal-btn-label">📅 Calendario</span>
+            </button>
+            <button onclick="showSettings()"
+                    class="w-11 h-11 card rounded-full flex items-center justify-center"
+                    style="color:var(--muted)">
+                <i class="fas fa-cog text-xl"></i>
+            </button>
+        </div>
     </div>
 
     <!-- ── Category selector ── -->
@@ -851,6 +900,170 @@ window.onload = () => {
     loadData();
     setFilter('all');
 };
+
+
+/* ═══════════════════════════════════════════════
+   GOOGLE CALENDAR INTEGRATION
+═══════════════════════════════════════════════ */
+const GCAL_CLIENT_ID = '350703432127-a2u8v2mcmn79drnhqkstdlvctrtopap1.apps.googleusercontent.com';
+const GCAL_SCOPE     = 'https://www.googleapis.com/auth/calendar.events';
+let   gcalToken      = null;
+
+function openGcal() {
+    document.getElementById('gcal-modal').classList.remove('hidden');
+    if (gcalToken) {
+        showGcalTasks();
+    }
+}
+
+function closeGcal() {
+    document.getElementById('gcal-modal').classList.add('hidden');
+}
+
+function gcalLogin() {
+    // Usar Google Identity Services (GIS) — carga bajo demanda
+    if (!window.google || !window.google.accounts) {
+        const s = document.createElement('script');
+        s.src = 'https://accounts.google.com/gsi/client';
+        s.onload = () => _gcalInitToken();
+        document.head.appendChild(s);
+    } else {
+        _gcalInitToken();
+    }
+}
+
+function _gcalInitToken() {
+    const client = google.accounts.oauth2.initTokenClient({
+        client_id: GCAL_CLIENT_ID,
+        scope:     GCAL_SCOPE,
+        callback:  (resp) => {
+            if (resp.error) { alert('Error al conectar con Google: ' + resp.error); return; }
+            gcalToken = resp.access_token;
+            document.getElementById('gcal-btn-label').textContent = '📅 Conectado';
+            showGcalTasks();
+        }
+    });
+    client.requestAccessToken();
+}
+
+function showGcalTasks() {
+    document.getElementById('gcal-login-area').classList.add('hidden');
+    document.getElementById('gcal-tasks-area').classList.remove('hidden');
+
+    // Filtrar tareas pendientes con fecha
+    const conFecha = tasks.filter(t => !t.done && t.due);
+    const lista    = document.getElementById('gcal-task-list');
+
+    if (conFecha.length === 0) {
+        lista.innerHTML = '<p class="text-sm py-4 text-center" style="color:var(--muted)">No hay tareas pendientes con fecha.</p>';
+        return;
+    }
+
+    lista.innerHTML = conFecha.map(t => `
+        <div class="gcal-task-row" id="gcal-row-${t.id}">
+            <div style="flex:1; min-width:0;">
+                <div class="text-sm font-medium truncate">${t.text}</div>
+                <div class="text-xs" style="color:var(--muted)">${formatDate(t.due)}${t.time ? ' · ' + t.time : ''}</div>
+            </div>
+            <button class="gcal-send-btn" onclick="gcalAddOne(${t.id}, this)">+ Añadir</button>
+        </div>
+    `).join('');
+}
+
+function formatDate(due) {
+    if (!due) return '';
+    const [y,m,d] = due.split('-');
+    return `${d}/${m}/${y}`;
+}
+
+async function gcalAddOne(taskId, btn) {
+    const t = tasks.find(t => t.id === taskId);
+    if (!t || !gcalToken) return;
+    btn.textContent = '...';
+    btn.disabled    = true;
+    const ok = await _gcalCreateEvent(t);
+    if (ok) {
+        btn.textContent = '✓ Añadida';
+        btn.classList.add('enviado');
+    } else {
+        btn.textContent = '+ Añadir';
+        btn.disabled    = false;
+    }
+}
+
+async function gcalAddAll() {
+    const conFecha = tasks.filter(t => !t.done && t.due);
+    for (const t of conFecha) {
+        const btn = document.querySelector(`#gcal-row-${t.id} .gcal-send-btn`);
+        if (btn && !btn.classList.contains('enviado')) {
+            if (btn) { btn.textContent = '...'; btn.disabled = true; }
+            const ok = await _gcalCreateEvent(t);
+            if (btn) {
+                btn.textContent = ok ? '✓ Añadida' : '+ Añadir';
+                if (ok) btn.classList.add('enviado');
+                else    btn.disabled = false;
+            }
+        }
+    }
+}
+
+async function _gcalCreateEvent(t) {
+    try {
+        // Construir fechas del evento
+        let start, end;
+        if (t.time) {
+            const dt    = `${t.due}T${t.time}:00`;
+            const dtEnd = `${t.due}T${addHour(t.time)}:00`;
+            start = { dateTime: dt,    timeZone: 'Europe/Madrid' };
+            end   = { dateTime: dtEnd, timeZone: 'Europe/Madrid' };
+        } else {
+            // Evento de día completo
+            const nextDay = new Date(t.due);
+            nextDay.setDate(nextDay.getDate() + 1);
+            start = { date: t.due };
+            end   = { date: nextDay.toISOString().split('T')[0] };
+        }
+
+        const event = {
+            summary:     t.text,
+            description: `Prioridad: ${t.priority || 'media'} | Proyecto: ${t.project || ''} | Creado desde PreCrastinar`,
+            start, end,
+            colorId: t.priority === 'alta' ? '11' : t.priority === 'baja' ? '2' : '7'
+        };
+
+        const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+            method:  'POST',
+            headers: {
+                'Authorization': 'Bearer ' + gcalToken,
+                'Content-Type':  'application/json'
+            },
+            body: JSON.stringify(event)
+        });
+
+        if (res.status === 401) {
+            gcalToken = null;
+            alert('Sesión expirada. Vuelve a conectar con Google.');
+            document.getElementById('gcal-login-area').classList.remove('hidden');
+            document.getElementById('gcal-tasks-area').classList.add('hidden');
+            return false;
+        }
+        return res.ok;
+    } catch(e) {
+        console.error('Error Google Calendar:', e);
+        return false;
+    }
+}
+
+function addHour(time) {
+    const [h, m] = time.split(':').map(Number);
+    const nh = (h + 1) % 24;
+    return `${String(nh).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+// Cerrar modal al tocar fuera
+document.getElementById('gcal-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeGcal();
+});
 
 // ═══════════════════════════════════════════════
 // MICRÓFONO — Web Speech API (Android-compatible)
